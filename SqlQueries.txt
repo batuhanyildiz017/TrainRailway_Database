@@ -1,0 +1,139 @@
+-- TBLPCOUNT tablosu oluştur
+CREATE TABLE TBLPCOUNT(
+	TRAIN INT,
+	PCOUNT INT,
+	);
+	-----------------------------------------------------------------------------------------BOARDED tablosuna veri eklendiğinde çalışacak trigger
+CREATE TRIGGER UPDATE_PCOUNT ON TBLBOARDED
+AFTER INSERT
+AS
+BEGIN
+-- TBLBOARDED tablosundaki TRAIN değerlerine göre grupla ve say
+SELECT TRAIN, COUNT(*) AS PCOUNT
+FROM TBLBOARDED
+GROUP BY TRAIN;
+
+DELETE FROM TBLPCOUNT
+
+-- TBLPCOUNT tablosuna gruplanmış ve sayılmış değerleri ekle
+INSERT INTO TBLPCOUNT (TRAIN, PCOUNT)
+SELECT TRAIN, COUNT(*) AS PCOUNT
+FROM TBLBOARDED
+GROUP BY TRAIN;
+END
+
+--SELECT * FROM TBLPCOUNT
+-----------------------------------------------------------------------------------------------------------BOARDED tablosundan Veri silindiğinde çalışacak trigger
+CREATE TRIGGER DELETE_PCOUNT ON TBLBOARDED
+AFTER DELETE
+AS
+BEGIN
+-- TBLBOARDED tablosundaki TRAIN değerlerine göre grupla ve say
+SELECT TRAIN, COUNT(*) AS PCOUNT
+FROM TBLBOARDED
+GROUP BY TRAIN;
+
+DELETE FROM TBLPCOUNT
+
+-- TBLPCOUNT tablosuna gruplanmış ve sayılmış değerleri ekle
+INSERT INTO TBLPCOUNT (TRAIN, PCOUNT)
+SELECT TRAIN, COUNT(*) AS PCOUNT
+FROM TBLBOARDED
+GROUP BY TRAIN;
+END
+----------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------
+
+
+--SELECT TRAIN,MNAME,MSALARY,TRAINCAPACITY,DEPARTURETIME1,DEPARTURETIME2,DEPARTURETIME3,PNAME,PSURNAME,PBIRTHDATE,PFARE FROM TBLBOARDED 
+--JOIN TBLPASSENGER ON TBLPASSENGER.PASSENGERID=TBLBOARDED.PASSENGER
+--JOIN TBLTRAIN ON TBLTRAIN.TRAINID=TBLBOARDED.TRAIN
+--JOIN TBLMACHINIST ON TBLMACHINIST.MACHINISTID=TBLTRAIN.MACHINIST
+
+-------------------------------------------------------------------------------------------------------------------------------------------VIEW KULLANIMI
+CREATE VIEW TrainView AS
+SELECT TRAIN,MNAME,MSALARY,TRAINCAPACITY,DEPARTURETIME1,DEPARTURETIME2,DEPARTURETIME3,PNAME,PSURNAME,PBIRTHDATE,PFARE FROM TBLBOARDED 
+JOIN TBLPASSENGER ON TBLPASSENGER.PASSENGERID=TBLBOARDED.PASSENGER
+JOIN TBLTRAIN ON TBLTRAIN.TRAINID=TBLBOARDED.TRAIN
+JOIN TBLMACHINIST ON TBLMACHINIST.MACHINISTID=TBLTRAIN.MACHINIST;
+
+SELECT * FROM TrainView
+--Trene aktif olarak binmiş kişileri gösteren view
+
+-------------------------------------------------------------------------------
+
+-- triggerların çalışıp çalışmadığını kontrol etmek için sorgular
+DELETE FROM TBLBOARDED WHERE PASSENGER=263
+SELECT * FROM TBLPCOUNT
+SELECT * FROM TBLBOARDED
+INSERT INTO TBLBOARDED(TRAIN,PASSENGER) VALUES (5,263)
+
+-------------------------------------------------------------INDEX KULLANIMI TBLBOARDED VE TBLPASSENGER TABLOLARINA EKLEME
+
+-- BOARDED tablosuna id sütununa index eklemek için
+CREATE INDEX IDXBOARDED ON TBLBOARDED (PASSENGER);
+
+-- PASSENGER tablosuna ıd ve name sütununa index eklemek için
+CREATE INDEX IDXPASSENGER ON TBLPASSENGER (PNAME,PASSENGERID);
+SET STATISTICS IO ON
+SET STATISTICS TIME ON
+SELECT * FROM TBLPASSENGER WHERE PASSENGERID=441
+
+SELECT * FROM TBLBOARDED
+JOIN TBLPASSENGER ON TBLPASSENGER.PASSENGERID=TBLBOARDED.PASSENGER
+WHERE PASSENGER=3
+
+--------------------------------------------------------------------
+
+
+-- TBLTRAIN tablosundan TROUTE değerine göre veri getiren bir procedure oluşturmak için
+
+CREATE PROCEDURE GETTRAINROUTE 
+	@DEGER VARCHAR(100)=' '
+	as
+	SELECT TRAINID,TRAINCAPACITY,DEPARTURETIME1,DEPARTURETIME2,DEPARTURETIME3,DEPARTURETIME4,MNAME,MSURNAME,MGENDER,RLOCATION,RNAME FROM TBLTRAIN
+	JOIN TBLROUTE ON TBLROUTE.ROUTEID=TBLTRAIN.TROUTE
+	JOIN TBLMACHINIST ON TBLMACHINIST.MACHINISTID=TBLTRAIN.MACHINIST
+	WHERE RNAME=@DEGER
+
+
+-- Procedure'ü çalıştırmak için
+
+EXEC GETTRAINROUTE @DEGER='A2B'
+
+-------------------------------------------------------------------------------------------------------
+
+CREATE PROCEDURE GETSTATION
+	@DEGER VARCHAR(100)= ' '
+	AS
+	SELECT STATIONID,STATIONPOINT,RLOCATION,RNAME FROM TBLSTATION
+	JOIN TBLROUTE ON TBLROUTE.ROUTEID=TBLSTATION.SROUTE
+	WHERE RNAME=@DEGER
+
+--Rota ismine göre o rotadaki durakları getiren procedure
+EXECUTE GETSTATION @DEGER='A8B'
+
+--------------------------------------------------------------------------------------------------------------
+-- TBLBOARDED ve TBLPASSENGER tablolarından TRAIN'e göre toplam bilet ücretini hesaplayan bir fonksiyon oluşturmak için
+CREATE FUNCTION get_total_fare (@train int)
+RETURNS int
+AS
+BEGIN
+  DECLARE @total int;
+  SET @total = 0;
+  -- TBLBOARDED ve TBLPASSENGER tablolarını birleştirerek, verilen TRAIN değerine göre PFARE değerlerini al
+  SELECT @total = @total + CASE PFARE
+    WHEN 'STUDENT' THEN 8 -- STUDENT ise 8 ile çarp
+    WHEN 'STANDARD' THEN 15 -- STANDARD ise 15 ile çarp
+    ELSE 0 -- Diğer durumlarda 0 ekle
+  END
+  FROM TBLBOARDED B
+  INNER JOIN TBLPASSENGER P
+  ON B.PASSENGER = P.PASSENGERID
+  WHERE B.TRAIN = @train;
+  -- Toplam bilet ücretini döndür
+  RETURN @total;
+END
+SELECT dbo.get_total_fare(12) AS TotalFare;  -- Tren ıd sini girdiğinde o trendeki yolcuların toplam bilet fiyatın veren fonksiyon
+
+----------------------------------------------------------------------
